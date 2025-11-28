@@ -1,203 +1,127 @@
 import os
-from dotenv import load_dotenv
 import requests
-from flask import Flask, render_template, request
+from dotenv import load_dotenv
+from flask import Flask, render_template, request, abort
 
-# ============================
-#   CONFIG & INITIAL SETUP
-# ============================
-
+# Încarcă variabilele din .env (local).
 load_dotenv()
+
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")
-BASE_URL = "https://api.themoviedb.org/3"
+
+if not TMDB_API_KEY:
+    raise RuntimeError("TMDB_API_KEY nu este setat în .env sau în environment!")
 
 app = Flask(__name__)
 
+TMDB_BASE_URL = "https://api.themoviedb.org/3"
+TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w342"  # pentru postere
 
-# ============================
-#       HELPER FUNCTIONS
-# ============================
+
+def tmdb_get(path, params=None):
+    """Apel simplu la TMDB cu tratare de erori."""
+    if params is None:
+        params = {}
+    params["api_key"] = TMDB_API_KEY
+    params.setdefault("language", "en-US")
+
+    resp = requests.get(f"{TMDB_BASE_URL}{path}", params=params, timeout=10)
+    if resp.status_code == 200:
+        return resp.json()
+    print("TMDB error:", resp.status_code, resp.text)
+    return {}
+
 
 def get_genres():
-    """Return list of movie genres from TMDB."""
-    url = f"{BASE_URL}/genre/movie/list"
-    params = {
-        "api_key": TMDB_API_KEY,
-        "language": "en-US",
-    }
-
-    try:
-        resp = requests.get(url, params=params, timeout=10, verify=False)
-        if resp.status_code == 200:
-            return resp.json().get("genres", [])
-        print("TMDB error (genres):", resp.status_code)
-    except requests.exceptions.RequestException as e:
-        print("SSL / Network error at get_genres():", e)
-
-    return []
+    data = tmdb_get("/genre/movie/list")
+    return data.get("genres", [])
 
 
-def discover_movies(genre_id=None, year=None):
-    """Discover popular movies, optionally filtered by genre and year."""
-    url = f"{BASE_URL}/discover/movie"
-    params = {
-        "api_key": TMDB_API_KEY,
-        "language": "en-US",
-        "sort_by": "popularity.desc",
-    }
-    if genre_id:
-        params["with_genres"] = genre_id
-    if year:
-        params["primary_release_year"] = year
-
-    try:
-        resp = requests.get(url, params=params, timeout=10, verify=False)
-        if resp.status_code == 200:
-            return resp.json().get("results", [])
-        print("TMDB error (discover):", resp.status_code)
-    except requests.exceptions.RequestException as e:
-        print("SSL / Network error at discover_movies():", e)
-
-    return []
-
-
-def search_movies(query=None, genre_id=None, year=None):
+def search_movies(title=None, genre_id=None, year=None):
     """
-    Search movies by title (+ optional genre/year).
-    If no title is given, fallback to discover_movies().
+    Dacă avem title -> /search/movie + filtrare după gen/an.
+    Dacă nu avem title -> /discover/movie cu gen/an.
     """
-    if query:
-        url = f"{BASE_URL}/search/movie"
+    if title:
         params = {
-            "api_key": TMDB_API_KEY,
-            "language": "en-US",
-            "query": query,
-            "include_adult": "false",
+            "query": title,
+            "include_adult": False,
+        }
+        if year:
+            params["year"] = year
+
+        data = tmdb_get("/search/movie", params)
+        results = data.get("results", [])
+
+        if genre_id:
+            results = [
+                m for m in results
+                if genre_id in m.get("genre_ids", [])
+            ]
+    else:
+        params = {
+            "sort_by": "popularity.desc",
+            "include_adult": False,
         }
         if genre_id:
             params["with_genres"] = genre_id
         if year:
             params["primary_release_year"] = year
-    else:
-        return discover_movies(genre_id, year)
 
-    try:
-        resp = requests.get(url, params=params, timeout=10, verify=False)
-        if resp.status_code == 200:
-            return resp.json().get("results", [])
-        print("TMDB error (search):", resp.status_code)
-    except requests.exceptions.RequestException as e:
-        print("SSL / Network error at search_movies():", e)
+        data = tmdb_get("/discover/movie", params)
+        results = data.get("results", [])
 
-    return []
+    return results
 
 
-def get_movie_details(movie_id: int):
-    """Get full movie details from TMDB."""
-    url = f"{BASE_URL}/movie/{movie_id}"
-    params = {
-        "api_key": TMDB_API_KEY,
-        "language": "en-US",
+def get_movie_details(movie_id):
+    """
+    Detalii film + trailere + where to watch (US).
+    """
+    data = tmdb_get(
+        f"/movie/{movie_id}",
+        params={"append_to_response": "videos,watch/providers"},
+    )
+    if not data or "id" not in data:
+        return None
+
+    # Trailer YouTube
+    trailer_url = None
+    videos = data.get("videos", {}).get("results", [])
+    for v in videos:
+        if v.get("site") == "YouTube" and v.get("type") == "Trailer":
+            trailer_url = f"https://www.youtube.com/watch?v={v['key']}"
+            break
+
+    # Where to watch (US)
+    providers = []
+    wp = data.get("watch/providers", {}).get("results", {})
+    us_providers = wp.get("US", {})  # poți schimba țara aici
+    flatrate = us_providers.get("flatrate", [])
+    for p in flatrate:
+        name = p.get("provider_name")
+        if name:
+            providers.append(name)
+
+    # Construim un dict simplu pentru template
+    movie = {
+        "id": data["id"],
+        "title": data.get("title"),
+        "overview": data.get("overview"),
+        "poster_url": TMDB_IMAGE_BASE + data["poster_path"]
+        if data.get("poster_path")
+        else None,
+        "year": (data.get("release_date") or "")[:4],
+        "rating": round(data.get("vote_average", 0), 1)
+        if data.get("vote_average") is not None
+        else None,
+        "votes": data.get("vote_count"),
+        "genres": [g["name"] for g in data.get("genres", [])],
+        "trailer_url": trailer_url,
+        "providers": providers,
     }
 
-    try:
-        resp = requests.get(url, params=params, timeout=10, verify=False)
-        if resp.status_code == 200:
-            return resp.json()
-        print("TMDB error (details):", resp.status_code)
-    except requests.exceptions.RequestException as e:
-        print("SSL / Network error at get_movie_details():", e)
+    return movie
 
-    return None
-
-
-def get_movie_trailer(movie_id: int):
-    """Return YouTube trailer URL if available."""
-    url = f"{BASE_URL}/movie/{movie_id}/videos"
-    params = {
-        "api_key": TMDB_API_KEY,
-        "language": "en-US",
-    }
-
-    try:
-        resp = requests.get(url, params=params, timeout=10, verify=False)
-        if resp.status_code == 200:
-            videos = resp.json().get("results", [])
-            for v in videos:
-                if v.get("site") == "YouTube" and v.get("type") == "Trailer":
-                    key = v.get("key")
-                    if key:
-                        return f"https://www.youtube.com/watch?v={key}"
-        print("TMDB error (trailer):", resp.status_code)
-    except requests.exceptions.RequestException as e:
-        print("SSL / Network error at get_movie_trailer():", e)
-
-    return None
-
-
-def get_watch_providers(movie_id: int, region: str = "IE"):
-    """Return streaming providers list for a movie (flatrate/rent/buy)."""
-    url = f"{BASE_URL}/movie/{movie_id}/watch/providers"
-    params = {"api_key": TMDB_API_KEY}
-
-    try:
-        resp = requests.get(url, params=params, timeout=10, verify=False)
-        if resp.status_code == 200:
-            results = resp.json().get("results", {})
-            region_data = results.get(region) or results.get("US")
-            if not region_data:
-                return []
-
-            providers = []
-            for kind in ("flatrate", "rent", "buy"):
-                for p in region_data.get(kind, []):
-                    providers.append(
-                        {
-                            "name": p.get("provider_name"),
-                            "type": kind,
-                        }
-                    )
-            return providers
-
-        print("TMDB error (providers):", resp.status_code)
-    except requests.exceptions.RequestException as e:
-        print("SSL / Network error at get_watch_providers():", e)
-
-    return []
-
-
-def get_similar_movies(movie_id: int):
-    """Return a short list of similar movies (for recommendations)."""
-    url = f"{BASE_URL}/movie/{movie_id}/similar"
-    params = {
-        "api_key": TMDB_API_KEY,
-        "language": "en-US",
-    }
-
-    try:
-        resp = requests.get(url, params=params, timeout=10, verify=False)
-        if resp.status_code == 200:
-            results = resp.json().get("results", [])
-            similar = []
-            for m in results[:8]:  # max 8 recomandări
-                similar.append({
-                    "id": m.get("id"),
-                    "title": m.get("title"),
-                    "poster_path": m.get("poster_path"),
-                    "vote_average": m.get("vote_average"),
-                    "release_date": m.get("release_date", "")
-                })
-            return similar
-        print("TMDB error (similar):", resp.status_code)
-    except requests.exceptions.RequestException as e:
-        print("SSL / Network error at get_similar_movies():", e)
-
-    return []
-
-
-# ============================
-#          ROUTES
-# ============================
 
 @app.route("/", methods=["GET"])
 def index():
@@ -207,54 +131,57 @@ def index():
 
 @app.route("/search", methods=["POST"])
 def search():
-    query = request.form.get("query", "").strip()
-    genre_id = request.form.get("genre", "").strip()
-    year = request.form.get("year", "").strip()
+    title = (request.form.get("title") or "").strip()
+    genre_id_raw = request.form.get("genre_id") or ""
+    year_raw = (request.form.get("year") or "").strip()
+
+    genre_id = int(genre_id_raw) if genre_id_raw.isdigit() else None
+    year = int(year_raw) if year_raw.isdigit() else None
 
     genres = get_genres()
+    genre_name = None
+    if genre_id:
+        for g in genres:
+            if g["id"] == genre_id:
+                genre_name = g["name"]
+                break
 
-    if not query and not genre_id and not year:
-        movies = discover_movies()
-    else:
-        movies = search_movies(
-            query if query else None,
-            genre_id if genre_id else None,
-            year if year else None,
+    tmdb_results = search_movies(title=title or None, genre_id=genre_id, year=year)
+
+    movies = []
+    for m in tmdb_results:
+        poster_url = TMDB_IMAGE_BASE + m["poster_path"] if m.get("poster_path") else None
+        movies.append(
+            {
+                "id": m["id"],
+                "title": m.get("title"),
+                "overview": (m.get("overview") or "")[:230],
+                "poster_url": poster_url,
+                "rating": round(m.get("vote_average", 0), 1)
+                if m.get("vote_average") is not None
+                else None,
+                "votes": m.get("vote_count"),
+                "year": (m.get("release_date") or "")[:4],
+            }
         )
 
     return render_template(
         "results.html",
         movies=movies,
-        genres=genres,
-        query=query,
-        selected_genre=genre_id,
-        selected_year=year,
+        title_query=title,
+        genre_name=genre_name,
+        year=year,
     )
 
 
 @app.route("/movie/<int:movie_id>")
 def movie_detail(movie_id):
-    """Movie details page."""
     movie = get_movie_details(movie_id)
     if not movie:
-        return "Movie not found", 404
+        abort(404)
+    return render_template("detail.html", movie=movie)
 
-    trailer_url = get_movie_trailer(movie_id)
-    providers = get_watch_providers(movie_id)
-    similar = get_similar_movies(movie_id)
-
-    return render_template(
-        "detail.html",
-        movie=movie,
-        trailer_url=trailer_url,
-        providers=providers,
-        similar_movies=similar,
-    )
-
-
-# ============================
-#          RUN APP
-# ============================
 
 if __name__ == "__main__":
+    # Local run
     app.run(debug=True)
