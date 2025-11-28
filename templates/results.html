@@ -4,198 +4,277 @@
     <meta charset="UTF-8">
     <title>Results – Movie Finder</title>
     <style>
+        :root {
+            --bg: #050b28;
+            --bg-card: rgba(12, 22, 80, 0.95);
+            --accent: #3b82f6;
+            --accent-soft: #1d4ed8;
+            --text: #f9fafb;
+            --muted: #9ca3af;
+            --rating-bg: #f59e0b;
+            --rating-text: #111827;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             margin: 0;
+            min-height: 100vh;
             font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            background: radial-gradient(circle at top, #263dff 0, #050714 55%, #020308 100%);
-            color: #f5f5ff;
+            color: var(--text);
+            background: radial-gradient(circle at top, #111827 0, #020617 55%, #000 100%);
         }
-        .container {
-            max-width: 1040px;
-            margin: 32px auto 40px;
-            padding: 0 20px;
+
+        .page {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 32px 16px 40px;
         }
-        a.back-link {
-            color: #9fb2ff;
-            font-size: 13px;
+
+        a {
+            color: var(--accent);
             text-decoration: none;
         }
-        a.back-link:hover {
+
+        a:hover {
             text-decoration: underline;
         }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.9rem;
+            color: var(--muted);
+            margin-bottom: 12px;
+        }
+
+        .back-link span {
+            font-size: 1.1rem;
+        }
+
         h1 {
-            margin: 10px 0 4px;
-            font-size: 30px;
+            margin: 0 0 4px;
+            font-size: 2rem;
         }
-        .filters {
-            font-size: 13px;
-            color: #b4bbff;
-            margin-bottom: 18px;
+
+        .subtitle {
+            margin: 0 0 24px;
+            font-size: 0.95rem;
+            color: var(--muted);
         }
-        .movies {
+
+        /* GRID DE CARDURI */
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 20px;
+        }
+
+        .movie-card {
+            background: var(--bg-card);
+            border-radius: 20px;
+            padding: 14px;
             display: flex;
             flex-direction: column;
-            gap: 18px;
+            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
         }
-        .movie-card {
-            display: flex;
-            gap: 18px;
-            padding: 16px;
-            border-radius: 18px;
-            background: radial-gradient(circle at top left, rgba(71, 88, 255, 0.35), rgba(6, 10, 32, 0.96));
-            box-shadow: 0 18px 34px rgba(0, 0, 0, 0.6);
+
+        .movie-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 26px 60px rgba(15, 23, 42, 0.95);
+            border-color: rgba(59, 130, 246, 0.7);
         }
-        .poster {
-            flex-shrink: 0;
-            width: 135px;
-            border-radius: 14px;
+
+        .poster-wrapper {
+            width: 100%;
+            border-radius: 16px;
             overflow: hidden;
-            background: #111524;
+            margin-bottom: 10px;
+            background: radial-gradient(circle at top, #1f2937, #020617);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 220px;
         }
-        .poster img {
-            display: block;
+
+        .poster-wrapper img {
             width: 100%;
             height: 100%;
             object-fit: cover;
+            display: block;
         }
-        .info {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
+
+        .no-poster {
+            font-size: 0.9rem;
+            color: var(--muted);
         }
-        .title-row {
+
+        .movie-header {
             display: flex;
             justify-content: space-between;
-            align-items: baseline;
-            gap: 10px;
+            align-items: flex-start;
+            gap: 8px;
+            margin-bottom: 4px;
         }
-        .title-row h2 {
-            margin: 0;
-            font-size: 20px;
+
+        .movie-title {
+            font-size: 1rem;
+            font-weight: 600;
+            line-height: 1.2;
         }
-        .year {
-            font-size: 14px;
-            color: #c1c7ff;
+
+        .movie-year {
+            font-size: 0.85rem;
+            color: var(--muted);
         }
+
         .rating-chip {
-            background: rgba(18, 18, 18, 0.9);
+            background: var(--rating-bg);
+            color: var(--rating-text);
             border-radius: 999px;
-            padding: 4px 10px;
-            font-size: 12px;
+            padding: 3px 10px;
+            font-size: 0.8rem;
             display: inline-flex;
             align-items: center;
             gap: 4px;
-        }
-        .rating-chip span.star {
-            color: #ffd76a;
-        }
-        .overview {
-            margin-top: 8px;
-            font-size: 14px;
-            color: #d6daff;
-        }
-        .actions {
-            margin-top: 10px;
-        }
-        .details-btn {
-            display: inline-block;
-            padding: 8px 14px;
-            border-radius: 999px;
-            background: linear-gradient(135deg, #3a8cff, #6bffda);
-            color: #020308;
-            font-size: 13px;
-            font-weight: 600;
-            text-decoration: none;
-        }
-        .details-btn:hover {
-            filter: brightness(1.06);
-        }
-        .empty {
-            margin-top: 24px;
-            padding: 18px;
-            border-radius: 16px;
-            background: rgba(6, 10, 32, 0.96);
-            font-size: 14px;
-            color: #cfd3ff;
+            white-space: nowrap;
         }
 
-        @media (max-width: 720px) {
-            .movie-card {
-                flex-direction: column;
+        .rating-chip span.star {
+            font-size: 0.85rem;
+        }
+
+        .votes {
+            font-size: 0.75rem;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+
+        .overview {
+            font-size: 0.85rem;
+            line-height: 1.4;
+            color: #e5e7eb;
+            margin: 8px 0 12px;
+            max-height: 4.2em; /* ~3 linii */
+            overflow: hidden;
+        }
+
+        .card-footer {
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .details-btn {
+            border: none;
+            border-radius: 999px;
+            padding: 8px 16px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            background: linear-gradient(135deg, var(--accent), var(--accent-soft));
+            color: white;
+            box-shadow: 0 8px 20px rgba(37, 99, 235, 0.45);
+            transition: transform 0.12s ease, box-shadow 0.12s ease;
+        }
+
+        .details-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 12px 28px rgba(37, 99, 235, 0.6);
+        }
+
+        .details-btn:active {
+            transform: translateY(0);
+            box-shadow: 0 5px 14px rgba(37, 99, 235, 0.45);
+        }
+
+        /* Mesaj pentru când nu sunt rezultate */
+        .no-results {
+            margin-top: 24px;
+            padding: 18px 20px;
+            border-radius: 14px;
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid rgba(148, 163, 184, 0.4);
+            font-size: 0.95rem;
+            color: var(--muted);
+        }
+
+        @media (max-width: 600px) {
+            .page {
+                padding: 20px 14px 24px;
             }
-            .poster {
-                width: 100%;
-                max-width: 220px;
+            h1 {
+                font-size: 1.6rem;
             }
         }
     </style>
 </head>
 <body>
-<div class="container">
-    <a href="{{ url_for('index') }}" class="back-link">← Back to search</a>
-    <h1>Results</h1>
+<div class="page">
+    <a href="{{ url_for('index') }}" class="back-link">
+        <span>←</span> Back to search
+    </a>
 
-    <div class="filters">
-        {% if title_query %}
-            Title: <strong>{{ title_query }}</strong>
+    <h1>Results</h1>
+    <p class="subtitle">
+        Showing popular movies.
+        {% if search_query %}
+            Search: <strong>{{ search_query }}</strong>
         {% endif %}
-        {% if genre_name %}
-            {% if title_query %} · {% endif %}
-            Genre: <strong>{{ genre_name }}</strong>
-        {% endif %}
-        {% if year %}
-            {% if title_query or genre_name %} · {% endif %}
-            Year: <strong>{{ year }}</strong>
-        {% endif %}
-        {% if not title_query and not genre_name and not year %}
-            Showing popular movies.
-        {% endif %}
-    </div>
+    </p>
 
     {% if movies %}
-        <div class="movies">
-            {% for m in movies %}
-                <div class="movie-card">
-                    <div class="poster">
-                        {% if m.poster_url %}
-                            <img src="{{ m.poster_url }}" alt="{{ m.title }}">
+        <div class="results-grid">
+            {% for movie in movies %}
+                <article class="movie-card">
+                    <div class="poster-wrapper">
+                        {% if movie.poster_url %}
+                            <img src="{{ movie.poster_url }}" alt="{{ movie.title }} poster">
                         {% else %}
-                            <div style="padding: 40px 10px; text-align: center; font-size: 12px; color:#888;">
-                                No poster
-                            </div>
+                            <div class="no-poster">No poster</div>
                         {% endif %}
                     </div>
-                    <div class="info">
-                        <div class="title-row">
-                            <div>
-                                <h2>{{ m.title }}</h2>
-                                {% if m.year %}
-                                    <div class="year">{{ m.year }}</div>
-                                {% endif %}
-                            </div>
-                            {% if m.rating %}
-                                <div class="rating-chip">
-                                    <span class="star">★</span>
-                                    <span>{{ m.rating }}</span>
-                                    {% if m.votes %}<span>· {{ m.votes }} votes</span>{% endif %}
-                                </div>
+
+                    <div class="movie-header">
+                        <div>
+                            <div class="movie-title">{{ movie.title }}</div>
+                            {% if movie.year %}
+                                <div class="movie-year">{{ movie.year }}</div>
                             {% endif %}
                         </div>
-                        <div class="overview">
-                            {{ m.overview or "No overview available." }}
-                        </div>
-                        <div class="actions">
-                            <a href="{{ url_for('movie_detail', movie_id=m.id) }}" class="details-btn">
-                                Details
-                            </a>
+                        <div>
+                            <div class="rating-chip">
+                                <span class="star">★</span>
+                                <span>{{ "%.1f"|format(movie.rating or 0) }}</span>
+                            </div>
+                            <div class="votes">
+                                Votes: {{ movie.vote_count or 0 }}
+                            </div>
                         </div>
                     </div>
-                </div>
+
+                    {% if movie.overview %}
+                        <p class="overview">
+                            {{ movie.overview }}
+                        </p>
+                    {% endif %}
+
+                    <div class="card-footer">
+                        <form action="{{ url_for('movie_detail', movie_id=movie.id) }}" method="get">
+                            <button type="submit" class="details-btn">Details</button>
+                        </form>
+                    </div>
+                </article>
             {% endfor %}
         </div>
     {% else %}
-        <div class="empty">
-            No movies found. Try another title, genre or year.
+        <div class="no-results">
+            No movies found. Try another search.
         </div>
     {% endif %}
 </div>
